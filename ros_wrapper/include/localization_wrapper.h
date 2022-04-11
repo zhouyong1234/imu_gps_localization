@@ -11,6 +11,7 @@
 
 #include "imu_gps_localizer/imu_gps_localizer.h"
 
+
 class LocalizationWrapper {
 public:
     LocalizationWrapper(ros::NodeHandle& nh);
@@ -24,11 +25,15 @@ private:
     void LogState(const ImuGpsLocalization::State& state);
     void LogGps(const ImuGpsLocalization::GpsPositionDataPtr gps_data);
 
+    void SavePose(std::ofstream &ofs, const Eigen::Matrix4d &pose);
+
     void ConvertStateToRosTopic(const ImuGpsLocalization::State& state);
     
     ros::Subscriber imu_sub_;
     ros::Subscriber gps_position_sub_;
     ros::Publisher state_pub_;
+
+    bool inited_ = false;
 
     std::ofstream file_state_;
     std::ofstream file_gps_;

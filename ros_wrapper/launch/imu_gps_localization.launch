@@ -1,8 +1,8 @@
 <launch>
-    <param name="acc_noise"       type="double" value="1e-2" />
-    <param name="gyro_noise"      type="double" value="1e-4" />
-    <param name="acc_bias_noise"  type="double" value="1e-6" />
-    <param name="gyro_bias_noise" type="double" value="1e-8" />
+    <param name="acc_noise"       type="double" value="0.01193226198" />
+    <param name="gyro_noise"      type="double" value="0.00249210429305" />
+    <param name="acc_bias_noise"  type="double" value="0.000685844067113" />
+    <param name="gyro_bias_noise" type="double" value="1.64026486406e-05" />
 
     <param name="I_p_Gps_x"       type="double" value="0.0" />
     <param name="I_p_Gps_y"       type="double" value="0.0" />

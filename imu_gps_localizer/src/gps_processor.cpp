@@ -1,6 +1,7 @@
 #include "imu_gps_localizer/gps_processor.h"
 
 #include "imu_gps_localizer/utils.h"
+#include <iostream>
 
 namespace ImuGpsLocalization {
 
@@ -19,6 +20,11 @@ bool GpsProcessor::UpdateStateByGpsPosition(const Eigen::Vector3d& init_lla, con
 
     // Add delta_x to state.
     AddDeltaToState(delta_x, state);
+
+
+    std::cout << "acc bias: " << state->acc_bias.transpose() << std::endl;
+    std::cout << "gyr bias: " << state->gyro_bias.transpose() << std::endl;
+    std::cout << "---------------------" << std::endl;
 
     // Covarance.
     const Eigen::MatrixXd I_KH = Eigen::Matrix<double, 15, 15>::Identity() - K * H;

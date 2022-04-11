@@ -5,6 +5,10 @@
 #include <glog/logging.h>
 
 #include "imu_gps_localizer/base_type.h"
+#include "imu_gps_localizer/gps_processor.h"
+
+// #include "imu_gps_localizer/utils.h"
+#include <GeographicLib/LocalCartesian.hpp>
 
 LocalizationWrapper::LocalizationWrapper(ros::NodeHandle& nh) {
     // Load configs.
@@ -24,8 +28,12 @@ LocalizationWrapper::LocalizationWrapper(ros::NodeHandle& nh) {
     ros::param::get("log_folder", log_folder);
 
     // Log.
-    file_state_.open(log_folder + "/state.csv");
-    file_gps_.open(log_folder +"/gps.csv");
+    // file_state_.open(log_folder + "/state.csv");
+    // file_gps_.open(log_folder +"/gps.csv");
+
+    file_state_.open(log_folder + "/state.txt");
+    file_gps_.open(log_folder + "/gps.txt");
+
 
     // Initialization imu gps localizer.
     imu_gps_localizer_ptr_ = 
@@ -34,8 +42,8 @@ LocalizationWrapper::LocalizationWrapper(ros::NodeHandle& nh) {
                                                               I_p_Gps);
 
     // Subscribe topics.
-    imu_sub_ = nh.subscribe("/imu/data", 10,  &LocalizationWrapper::ImuCallback, this);
-    gps_position_sub_ = nh.subscribe("/fix", 10,  &LocalizationWrapper::GpsPositionCallback, this);
+    imu_sub_ = nh.subscribe("/android/imu", 10,  &LocalizationWrapper::ImuCallback, this);
+    gps_position_sub_ = nh.subscribe("/android/fix", 10,  &LocalizationWrapper::GpsPositionCallback, this);
 
     state_pub_ = nh.advertise<nav_msgs::Path>("fused_path", 10);
 }
@@ -71,10 +79,10 @@ void LocalizationWrapper::ImuCallback(const sensor_msgs::ImuConstPtr& imu_msg_pt
 
 void LocalizationWrapper::GpsPositionCallback(const sensor_msgs::NavSatFixConstPtr& gps_msg_ptr) {
     // Check the gps_status.
-    if (gps_msg_ptr->status.status != 2) {
-        LOG(WARNING) << "[GpsCallBack]: Bad gps message!";
-        return;
-    }
+    // if (gps_msg_ptr->status.status != 2) {
+    //     LOG(WARNING) << "[GpsCallBack]: Bad gps message!";
+    //     return;
+    // }
 
     ImuGpsLocalization::GpsPositionDataPtr gps_data_ptr = std::make_shared<ImuGpsLocalization::GpsPositionData>();
     gps_data_ptr->timestamp = gps_msg_ptr->header.stamp.toSec();
@@ -89,21 +97,45 @@ void LocalizationWrapper::GpsPositionCallback(const sensor_msgs::NavSatFixConstP
 }
 
 void LocalizationWrapper::LogState(const ImuGpsLocalization::State& state) {
-    const Eigen::Quaterniond G_q_I(state.G_R_I);
-    file_state_ << std::fixed << std::setprecision(15)
-                << state.timestamp << ","
-                << state.lla[0] << "," << state.lla[1] << "," << state.lla[2] << ","
-                << state.G_p_I[0] << "," << state.G_p_I[1] << "," << state.G_p_I[2] << ","
-                << state.G_v_I[0] << "," << state.G_v_I[1] << "," << state.G_v_I[2] << ","
-                << G_q_I.x() << "," << G_q_I.y() << "," << G_q_I.z() << "," << G_q_I.w() << ","
-                << state.acc_bias[0] << "," << state.acc_bias[1] << "," << state.acc_bias[2] << ","
-                << state.gyro_bias[0] << "," << state.gyro_bias[1] << "," << state.gyro_bias[2] << "\n";
+    Eigen::Quaterniond G_q_I(state.G_R_I);
+    G_q_I.normalize();
+    // file_state_ << std::fixed << std::setprecision(15)
+    //             << state.timestamp << ","
+    //             << state.lla[0] << "," << state.lla[1] << "," << state.lla[2] << ","
+    //             << state.G_p_I[0] << "," << state.G_p_I[1] << "," << state.G_p_I[2] << ","
+    //             << state.G_v_I[0] << "," << state.G_v_I[1] << "," << state.G_v_I[2] << ","
+    //             << G_q_I.x() << "," << G_q_I.y() << "," << G_q_I.z() << "," << G_q_I.w() << ","
+    //             << state.acc_bias[0] << "," << state.acc_bias[1] << "," << state.acc_bias[2] << ","
+    //             << state.gyro_bias[0] << "," << state.gyro_bias[1] << "," << state.gyro_bias[2] << "\n";
+
+    Eigen::Matrix4d pose = Eigen::Matrix4d::Identity();
+    pose.block<3,3>(0,0) = G_q_I.toRotationMatrix();
+    pose.block<3,1>(0,3) = Eigen::Vector3d(state.G_p_I[0], state.G_p_I[1], state.G_p_I[2]);
+    SavePose(file_state_, pose);
+
 }
 
 void LocalizationWrapper::LogGps(const ImuGpsLocalization::GpsPositionDataPtr gps_data) {
-    file_gps_ << std::fixed << std::setprecision(15)
-              << gps_data->timestamp << ","
-              << gps_data->lla[0] << "," << gps_data->lla[1] << "," << gps_data->lla[2] << "\n";
+
+    static GeographicLib::LocalCartesian local_cartesian;
+
+
+    if(!inited_)
+    {
+        inited_ = true;
+        local_cartesian.Reset(gps_data->lla[0], gps_data->lla[1], gps_data->lla[2]);
+
+    }
+    // file_gps_ << std::fixed << std::setprecision(15)
+    //           << gps_data->timestamp << ","
+    //           << gps_data->lla[0] << "," << gps_data->lla[1] << "," << gps_data->lla[2] << "\n";
+    Eigen::Matrix4d matrix = Eigen::Matrix4d::Identity();
+    Eigen::Vector3d ned;
+    
+    local_cartesian.Forward(gps_data->lla[0], gps_data->lla[1], gps_data->lla[2], ned[0], ned[1], ned[2]);
+    matrix.block<3,1>(0,3) = ned;
+    SavePose(file_gps_, matrix);
+
 }
 
 void LocalizationWrapper::ConvertStateToRosTopic(const ImuGpsLocalization::State& state) {
@@ -124,4 +156,25 @@ void LocalizationWrapper::ConvertStateToRosTopic(const ImuGpsLocalization::State
     pose.pose.orientation.w = G_q_I.w();
 
     ros_path_.poses.push_back(pose);
+}
+
+
+void LocalizationWrapper::SavePose(std::ofstream &ofs, const Eigen::Matrix4d &pose)
+{
+    for(int i = 0; i < 3; ++i)
+    {
+        for(int j = 0; j < 4; ++j)
+        {
+            ofs << pose(i, j);
+
+            if(i == 2 && j == 3)
+            {
+                ofs << std::endl;
+            }
+            else
+            {
+                ofs << " ";
+            }
+        }
+    }
 }
